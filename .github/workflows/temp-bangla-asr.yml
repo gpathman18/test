@@ -45,7 +45,7 @@ jobs:
             https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
           curl -L --fail --retry 5 --retry-delay 3 \
             -o work/ggml-silero-v6.2.0.bin \
-            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-silero-v6.2.0.bin
+            https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
           ls -lh work
 
       - name: Run Bengali speech recognition
