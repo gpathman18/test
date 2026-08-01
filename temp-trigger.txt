@@ -1,1 +1,1 @@
-Temporary trigger for the corrected Bengali Transformers ASR package.
+Temporary trigger for Whisper Large v3 Turbo model packaging.
