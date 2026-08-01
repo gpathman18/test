@@ -1,1 +1,1 @@
-Temporary trigger for the original Bengali fine-tuned Transformers ASR model.
+Temporary trigger for the corrected Bengali Transformers ASR package.
