@@ -1,1 +1,1 @@
-Temporary trigger for Whisper Large v3 Turbo model packaging.
+Temporary trigger for final public Reel Bengali transcription and English translation.
