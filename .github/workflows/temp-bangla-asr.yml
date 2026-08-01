@@ -1,4 +1,4 @@
-name: Temporary OpenAI Whisper Runtime
+name: Temporary Public Reel Audio Check
 
 on:
   pull_request:
@@ -8,36 +8,33 @@ on:
   workflow_dispatch:
 
 jobs:
-  download-runtime:
+  fetch-public-reel:
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Package OpenAI Whisper runtime
+      - name: Fetch public oEmbed metadata
         run: |
           set -euxo pipefail
-          mkdir -p bundle/python bundle/model
-          python -m pip install --quiet --target bundle/python --no-deps openai-whisper tiktoken more-itertools
-          curl -L --fail --retry 5 --retry-delay 3 \
-            -o bundle/model/small.pt \
-            https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt
-          du -sh bundle/python bundle/model/small.pt
+          mkdir -p bundle
+          curl -L --fail --retry 3 \
+            --get 'https://graph.facebook.com/v25.0/oembed_video' \
+            --data-urlencode 'url=https://www.facebook.com/reel/1897613127856000/' \
+            -o bundle/oembed.json || true
+          cat bundle/oembed.json || true
 
-      - name: Upload Python runtime
+      - name: Try public Reel audio extraction
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet yt-dlp
+          yt-dlp --no-playlist \
+            -f 'bestaudio/best' \
+            -o 'bundle/original_reel.%(ext)s' \
+            'https://www.facebook.com/reel/1897613127856000/' || true
+          find bundle -maxdepth 1 -type f -printf '%f %s bytes\n'
+
+      - name: Upload public results
         uses: actions/upload-artifact@v4
         with:
-          name: openai-whisper-py313
-          path: bundle/python/
+          name: public-reel-audio-check
+          path: bundle/
           retention-days: 1
           compression-level: 6
-
-      - name: Upload Whisper small model
-        uses: actions/upload-artifact@v4
-        with:
-          name: openai-whisper-small-model
-          path: bundle/model/small.pt
-          retention-days: 1
-          compression-level: 0
