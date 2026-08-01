@@ -1,0 +1,29 @@
+name: Temporary Whisper Model
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temp-whisper-model.yml'
+  workflow_dispatch:
+
+jobs:
+  download-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download multilingual Whisper model
+        run: |
+          set -euxo pipefail
+          mkdir -p bundle
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o bundle/ggml-base-q5_1.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
+          ls -lh bundle/ggml-base-q5_1.bin
+          sha256sum bundle/ggml-base-q5_1.bin > bundle/sha256.txt
+
+      - name: Upload model bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-model-bengali
+          path: bundle/
+          retention-days: 1
+          compression-level: 0
