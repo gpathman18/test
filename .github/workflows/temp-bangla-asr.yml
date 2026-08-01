@@ -1,4 +1,4 @@
-name: Temporary Bangla ASR Model
+name: Temporary OpenAI Whisper Runtime
 
 on:
   pull_request:
@@ -8,29 +8,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  download-model:
+  download-runtime:
     runs-on: ubuntu-latest
     steps:
-      - name: Download Bengali-specific GGML model
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Package OpenAI Whisper runtime
         run: |
           set -euxo pipefail
-          mkdir -p bundle
-          python -m pip install --quiet huggingface_hub
-          python - <<'PY'
-          from huggingface_hub import hf_hub_download
-          import shutil
-          src = hf_hub_download(
-              repo_id='afridee/banglaasr-ggml',
-              filename='ggml-banglaasr-small-q5_0.bin',
-          )
-          shutil.copy2(src, 'bundle/ggml-banglaasr-small-q5_0.bin')
-          PY
-          ls -lh bundle/ggml-banglaasr-small-q5_0.bin
+          mkdir -p bundle/python bundle/model
+          python -m pip install --quiet --target bundle/python --no-deps openai-whisper tiktoken more-itertools
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o bundle/model/small.pt \
+            https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt
+          du -sh bundle/python bundle/model/small.pt
 
-      - name: Upload model bundle
+      - name: Upload Python runtime
         uses: actions/upload-artifact@v4
         with:
-          name: bangla-asr-q5
-          path: bundle/ggml-banglaasr-small-q5_0.bin
+          name: openai-whisper-py313
+          path: bundle/python/
+          retention-days: 1
+          compression-level: 6
+
+      - name: Upload Whisper small model
+        uses: actions/upload-artifact@v4
+        with:
+          name: openai-whisper-small-model
+          path: bundle/model/small.pt
           retention-days: 1
           compression-level: 0
