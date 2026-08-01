@@ -1,4 +1,4 @@
-name: Temporary Public Reel Transcription
+name: Temporary Chunked Bengali Transcription
 
 on:
   pull_request:
@@ -8,11 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  transcribe-public-reel:
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [transcribe, translate]
+  transcribe-chunks:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -32,44 +28,49 @@ jobs:
             -DWHISPER_BUILD_SERVER=OFF
           cmake --build whisper.cpp/build --config Release -j 4
 
-      - name: Download public Reel audio and models
+      - name: Download and split public Reel audio
         run: |
           set -euxo pipefail
-          mkdir -p work output
+          mkdir -p work/chunks output/chunks
           yt-dlp --no-playlist -f 'bestaudio/best' \
             -o 'work/reel.%(ext)s' \
             'https://www.facebook.com/reel/1897613127856000/'
           ffmpeg -v error -i work/reel.* -ac 1 -ar 16000 -c:a pcm_s16le work/reel.wav -y
+          ffmpeg -v error -i work/reel.wav -f segment -segment_time 8 \
+            -reset_timestamps 1 -c:a pcm_s16le work/chunks/chunk_%02d.wav
           curl -L --fail --retry 5 --retry-delay 3 \
             -o work/ggml-large-v3-turbo-q5_0.bin \
             https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
-          curl -L --fail --retry 5 --retry-delay 3 \
-            -o work/ggml-silero-v6.2.0.bin \
-            https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
-          ls -lh work
+          ls -lh work/chunks work/ggml-large-v3-turbo-q5_0.bin
 
-      - name: Run Bengali speech recognition
+      - name: Transcribe Bengali chunks independently
         run: |
           set -euxo pipefail
-          EXTRA=()
-          if [ '${{ matrix.task }}' = 'translate' ]; then EXTRA+=('-tr'); fi
-          timeout 45m whisper.cpp/build/bin/whisper-cli \
-            -m work/ggml-large-v3-turbo-q5_0.bin \
-            -f work/reel.wav \
-            -l bn -t 4 -bo 1 -bs 1 -nf -mc 0 -ml 160 -sow \
-            --vad -vm work/ggml-silero-v6.2.0.bin \
-            -vspd 200 -vsd 350 -vmsd 12 -vp 100 \
-            -otxt -osrt -oj \
-            -of 'output/${{ matrix.task }}' \
-            "${EXTRA[@]}" \
-            > 'output/${{ matrix.task }}.stdout.log' \
-            2> 'output/${{ matrix.task }}.stderr.log'
+          : > output/combined.txt
+          for wav in work/chunks/chunk_*.wav; do
+            base=$(basename "$wav" .wav)
+            timeout 8m whisper.cpp/build/bin/whisper-cli \
+              -m work/ggml-large-v3-turbo-q5_0.bin \
+              -f "$wav" \
+              -l bn -t 4 -bo 5 -bs 5 -nf -mc 0 -ml 120 \
+              -otxt -of "output/chunks/$base" \
+              > "output/chunks/$base.stdout.log" \
+              2> "output/chunks/$base.stderr.log" || true
+            printf '%s: ' "$base" >> output/combined.txt
+            if [ -f "output/chunks/$base.txt" ]; then
+              tr '\n' ' ' < "output/chunks/$base.txt" >> output/combined.txt
+            else
+              printf '[no transcript]' >> output/combined.txt
+            fi
+            printf '\n' >> output/combined.txt
+          done
+          cat output/combined.txt
 
-      - name: Upload result
+      - name: Upload chunked result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: public-reel-${{ matrix.task }}-result
+          name: public-reel-chunked-bengali-result
           path: output/
           retention-days: 1
           compression-level: 6
