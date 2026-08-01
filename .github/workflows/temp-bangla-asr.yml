@@ -14,21 +14,23 @@ jobs:
       - name: Download Bengali-specific GGML model
         run: |
           set -euxo pipefail
+          mkdir -p bundle
           python -m pip install --quiet huggingface_hub
           python - <<'PY'
-          from huggingface_hub import snapshot_download
-          snapshot_download(
+          from huggingface_hub import hf_hub_download
+          import shutil
+          src = hf_hub_download(
               repo_id='afridee/banglaasr-ggml',
-              local_dir='bundle',
-              local_dir_use_symlinks=False,
+              filename='ggml-banglaasr-small-q5_0.bin',
           )
+          shutil.copy2(src, 'bundle/ggml-banglaasr-small-q5_0.bin')
           PY
-          find bundle -maxdepth 2 -type f -printf '%p %k KB\n' | sort
+          ls -lh bundle/ggml-banglaasr-small-q5_0.bin
 
       - name: Upload model bundle
         uses: actions/upload-artifact@v4
         with:
-          name: bangla-asr-ggml
-          path: bundle/
+          name: bangla-asr-q5
+          path: bundle/ggml-banglaasr-small-q5_0.bin
           retention-days: 1
           compression-level: 0
