@@ -1,1 +1,1 @@
-Temporary trigger for the single Bengali ASR Q5 model artifact.
+Temporary trigger for original OpenAI Whisper Python runtime and model.
