@@ -1,1 +1,1 @@
-Temporary trigger for original OpenAI Whisper Python runtime and model.
+Temporary trigger for the public Reel source-audio check.
