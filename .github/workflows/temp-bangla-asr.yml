@@ -1,0 +1,34 @@
+name: Temporary Bangla ASR Model
+
+on:
+  pull_request:
+    paths:
+      - 'temp-trigger.txt'
+      - '.github/workflows/temp-bangla-asr.yml'
+  workflow_dispatch:
+
+jobs:
+  download-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Bengali-specific GGML model
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet huggingface_hub
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download(
+              repo_id='afridee/banglaasr-ggml',
+              local_dir='bundle',
+              local_dir_use_symlinks=False,
+          )
+          PY
+          find bundle -maxdepth 2 -type f -printf '%p %k KB\n' | sort
+
+      - name: Upload model bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bangla-asr-ggml
+          path: bundle/
+          retention-days: 1
+          compression-level: 0
