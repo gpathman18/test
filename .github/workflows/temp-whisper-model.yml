@@ -19,15 +19,15 @@ jobs:
           set -euxo pipefail
           mkdir -p bundle
           curl -L --fail --retry 5 --retry-delay 3 \
-            -o bundle/ggml-base-q5_1.bin \
-            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
-          ls -lh bundle/ggml-base-q5_1.bin
-          sha256sum bundle/ggml-base-q5_1.bin > bundle/sha256.txt
+            -o bundle/ggml-small-q5_1.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin
+          ls -lh bundle/ggml-small-q5_1.bin
+          sha256sum bundle/ggml-small-q5_1.bin > bundle/sha256.txt
 
       - name: Upload model bundle
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-model-bengali
+          name: whisper-model-bengali-small
           path: bundle/
           retention-days: 1
           compression-level: 0
