@@ -1,4 +1,4 @@
-name: Temporary Public Reel Audio Check
+name: Temporary Bengali Transformers ASR
 
 on:
   pull_request:
@@ -8,33 +8,97 @@ on:
   workflow_dispatch:
 
 jobs:
-  fetch-public-reel:
+  package-model:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch public oEmbed metadata
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download and split Bengali ASR model
         run: |
           set -euxo pipefail
-          mkdir -p bundle
-          curl -L --fail --retry 3 \
-            --get 'https://graph.facebook.com/v25.0/oembed_video' \
-            --data-urlencode 'url=https://www.facebook.com/reel/1897613127856000/' \
-            -o bundle/oembed.json || true
-          cat bundle/oembed.json || true
+          python -m pip install --quiet huggingface_hub
+          mkdir -p bundle/model bundle/meta bundle/parts bundle/runtime bundle/reel-meta
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download(
+              repo_id='bangla-speech-processing/BanglaASR',
+              local_dir='bundle/model',
+          )
+          PY
+          WEIGHT=""
+          for candidate in bundle/model/model.safetensors bundle/model/pytorch_model.bin; do
+            if [ -f "$candidate" ]; then WEIGHT="$candidate"; break; fi
+          done
+          test -n "$WEIGHT"
+          find bundle/model -maxdepth 1 -type f ! -path "$WEIGHT" -exec cp -a {} bundle/meta/ \;
+          split -b 300M -d -a 2 "$WEIGHT" bundle/parts/weights.part.
+          printf '%s\n' "$(basename "$WEIGHT")" > bundle/meta/weight_filename.txt
+          ls -lh bundle/model bundle/meta bundle/parts
 
-      - name: Try public Reel audio extraction
+      - name: Package Transformers runtime
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet --target bundle/runtime --no-deps \
+            'transformers==4.57.1' 'tokenizers==0.22.1'
+          du -sh bundle/runtime
+
+      - name: Fetch public Reel metadata and subtitles
         run: |
           set -euxo pipefail
           python -m pip install --quiet yt-dlp
-          yt-dlp --no-playlist \
-            -f 'bestaudio/best' \
-            -o 'bundle/original_reel.%(ext)s' \
-            'https://www.facebook.com/reel/1897613127856000/' || true
-          find bundle -maxdepth 1 -type f -printf '%f %s bytes\n'
+          yt-dlp --dump-single-json --skip-download \
+            --write-subs --write-auto-subs --sub-langs all \
+            -o 'bundle/reel-meta/reel.%(ext)s' \
+            'https://www.facebook.com/reel/1897613127856000/' \
+            > bundle/reel-meta/reel.json || true
+          find bundle/reel-meta -maxdepth 1 -type f -printf '%f %s bytes\n'
 
-      - name: Upload public results
+      - name: Upload runtime and metadata
         uses: actions/upload-artifact@v4
         with:
-          name: public-reel-audio-check
-          path: bundle/
+          name: bengali-asr-runtime-meta
+          path: |
+            bundle/runtime/
+            bundle/meta/
+            bundle/reel-meta/
           retention-days: 1
           compression-level: 6
+
+      - name: Upload weights part 00
+        if: ${{ hashFiles('bundle/parts/weights.part.00') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bengali-asr-weights-00
+          path: bundle/parts/weights.part.00
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload weights part 01
+        if: ${{ hashFiles('bundle/parts/weights.part.01') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bengali-asr-weights-01
+          path: bundle/parts/weights.part.01
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload weights part 02
+        if: ${{ hashFiles('bundle/parts/weights.part.02') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bengali-asr-weights-02
+          path: bundle/parts/weights.part.02
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload weights part 03
+        if: ${{ hashFiles('bundle/parts/weights.part.03') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bengali-asr-weights-03
+          path: bundle/parts/weights.part.03
+          retention-days: 1
+          compression-level: 0
