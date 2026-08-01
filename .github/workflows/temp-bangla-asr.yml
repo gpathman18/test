@@ -1,4 +1,4 @@
-name: Temporary Whisper Large v3 Turbo
+name: Temporary Public Reel Transcription
 
 on:
   pull_request:
@@ -8,41 +8,68 @@ on:
   workflow_dispatch:
 
 jobs:
-  package-model:
+  transcribe-public-reel:
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [transcribe, translate]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - name: Download and split multilingual model
+      - name: Prepare tools
         run: |
           set -euxo pipefail
-          mkdir -p bundle/parts
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake build-essential ffmpeg
+          python -m pip install --quiet yt-dlp
+
+      - name: Build whisper.cpp
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+          cmake -S whisper.cpp -B whisper.cpp/build \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF
+          cmake --build whisper.cpp/build --config Release -j 4
+
+      - name: Download public Reel audio and models
+        run: |
+          set -euxo pipefail
+          mkdir -p work output
+          yt-dlp --no-playlist -f 'bestaudio/best' \
+            -o 'work/reel.%(ext)s' \
+            'https://www.facebook.com/reel/1897613127856000/'
+          ffmpeg -v error -i work/reel.* -ac 1 -ar 16000 -c:a pcm_s16le work/reel.wav -y
           curl -L --fail --retry 5 --retry-delay 3 \
-            -o bundle/ggml-large-v3-turbo-q5_0.bin \
+            -o work/ggml-large-v3-turbo-q5_0.bin \
             https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
-          split -b 300M -d -a 2 bundle/ggml-large-v3-turbo-q5_0.bin bundle/parts/model.part.
-          ls -lh bundle/ggml-large-v3-turbo-q5_0.bin bundle/parts
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o work/ggml-silero-v6.2.0.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-silero-v6.2.0.bin
+          ls -lh work
 
-      - name: Upload model part 00
+      - name: Run Bengali speech recognition
+        run: |
+          set -euxo pipefail
+          EXTRA=()
+          if [ '${{ matrix.task }}' = 'translate' ]; then EXTRA+=('-tr'); fi
+          timeout 45m whisper.cpp/build/bin/whisper-cli \
+            -m work/ggml-large-v3-turbo-q5_0.bin \
+            -f work/reel.wav \
+            -l bn -t 4 -bo 1 -bs 1 -nf -mc 0 -ml 160 -sow \
+            --vad -vm work/ggml-silero-v6.2.0.bin \
+            -vspd 200 -vsd 350 -vmsd 12 -vp 100 \
+            -otxt -osrt -oj \
+            -of 'output/${{ matrix.task }}' \
+            "${EXTRA[@]}" \
+            > 'output/${{ matrix.task }}.stdout.log' \
+            2> 'output/${{ matrix.task }}.stderr.log'
+
+      - name: Upload result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-turbo-q5-00
-          path: bundle/parts/model.part.00
+          name: public-reel-${{ matrix.task }}-result
+          path: output/
           retention-days: 1
-          compression-level: 0
-
-      - name: Upload model part 01
-        if: ${{ hashFiles('bundle/parts/model.part.01') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper-turbo-q5-01
-          path: bundle/parts/model.part.01
-          retention-days: 1
-          compression-level: 0
-
-      - name: Upload model part 02
-        if: ${{ hashFiles('bundle/parts/model.part.02') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper-turbo-q5-02
-          path: bundle/parts/model.part.02
-          retention-days: 1
-          compression-level: 0
+          compression-level: 6
