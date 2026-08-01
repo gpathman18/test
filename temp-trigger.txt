@@ -1,1 +1,1 @@
-Temporary trigger for Bengali-specific ASR model download.
+Temporary trigger for the single Bengali ASR Q5 model artifact.
