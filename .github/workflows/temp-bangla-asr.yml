@@ -1,4 +1,4 @@
-name: Temporary Bengali Transformers ASR
+name: Temporary Whisper Large v3 Turbo
 
 on:
   pull_request:
@@ -11,95 +11,38 @@ jobs:
   package-model:
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Download and split Bengali ASR model
+      - name: Download and split multilingual model
         run: |
           set -euxo pipefail
-          python -m pip install --quiet huggingface_hub
-          mkdir -p bundle/model bundle/meta bundle/parts bundle/runtime bundle/reel-meta
-          python - <<'PY'
-          from huggingface_hub import snapshot_download
-          snapshot_download(
-              repo_id='bangla-speech-processing/BanglaASR',
-              local_dir='bundle/model',
-          )
-          PY
-          WEIGHT=""
-          for candidate in bundle/model/model.safetensors bundle/model/pytorch_model.bin; do
-            if [ -f "$candidate" ]; then WEIGHT="$candidate"; break; fi
-          done
-          test -n "$WEIGHT"
-          find bundle/model -maxdepth 1 -type f -size -100M -exec cp -a {} bundle/meta/ \;
-          split -b 300M -d -a 2 "$WEIGHT" bundle/parts/weights.part.
-          printf '%s\n' "$(basename "$WEIGHT")" > bundle/meta/weight_filename.txt
-          du -sh bundle/meta bundle/parts
-          ls -lh bundle/meta bundle/parts
+          mkdir -p bundle/parts
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o bundle/ggml-large-v3-turbo-q5_0.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+          split -b 300M -d -a 2 bundle/ggml-large-v3-turbo-q5_0.bin bundle/parts/model.part.
+          ls -lh bundle/ggml-large-v3-turbo-q5_0.bin bundle/parts
 
-      - name: Package Transformers runtime
-        run: |
-          set -euxo pipefail
-          python -m pip install --quiet --target bundle/runtime --no-deps \
-            'transformers==4.57.1' 'tokenizers==0.22.1'
-          du -sh bundle/runtime
-
-      - name: Fetch public Reel metadata and subtitles
-        run: |
-          set -euxo pipefail
-          python -m pip install --quiet yt-dlp
-          yt-dlp --dump-single-json --skip-download \
-            --write-subs --write-auto-subs --sub-langs all \
-            -o 'bundle/reel-meta/reel.%(ext)s' \
-            'https://www.facebook.com/reel/1897613127856000/' \
-            > bundle/reel-meta/reel.json || true
-          find bundle/reel-meta -maxdepth 1 -type f -printf '%f %s bytes\n'
-
-      - name: Upload runtime and metadata
+      - name: Upload model part 00
         uses: actions/upload-artifact@v4
         with:
-          name: bengali-asr-runtime-meta-fixed
-          path: |
-            bundle/runtime/
-            bundle/meta/
-            bundle/reel-meta/
-          retention-days: 1
-          compression-level: 6
-
-      - name: Upload weights part 00
-        if: ${{ hashFiles('bundle/parts/weights.part.00') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: bengali-asr-weights-fixed-00
-          path: bundle/parts/weights.part.00
+          name: whisper-turbo-q5-00
+          path: bundle/parts/model.part.00
           retention-days: 1
           compression-level: 0
 
-      - name: Upload weights part 01
-        if: ${{ hashFiles('bundle/parts/weights.part.01') != '' }}
+      - name: Upload model part 01
+        if: ${{ hashFiles('bundle/parts/model.part.01') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: bengali-asr-weights-fixed-01
-          path: bundle/parts/weights.part.01
+          name: whisper-turbo-q5-01
+          path: bundle/parts/model.part.01
           retention-days: 1
           compression-level: 0
 
-      - name: Upload weights part 02
-        if: ${{ hashFiles('bundle/parts/weights.part.02') != '' }}
+      - name: Upload model part 02
+        if: ${{ hashFiles('bundle/parts/model.part.02') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: bengali-asr-weights-fixed-02
-          path: bundle/parts/weights.part.02
-          retention-days: 1
-          compression-level: 0
-
-      - name: Upload weights part 03
-        if: ${{ hashFiles('bundle/parts/weights.part.03') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: bengali-asr-weights-fixed-03
-          path: bundle/parts/weights.part.03
+          name: whisper-turbo-q5-02
+          path: bundle/parts/model.part.02
           retention-days: 1
           compression-level: 0
